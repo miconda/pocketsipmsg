@@ -21,6 +21,7 @@ CSetupDlg::CSetupDlg(CWnd* pParent /*=NULL*/)
 	m_strSrvAddress = _T("");
 	m_nSrvPort = 0;
 	m_strUserName = _T("");
+	m_strPassword = _T("");
 	//}}AFX_DATA_INIT
 }
 
@@ -32,6 +33,7 @@ void CSetupDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Text(pDX, IDC_EDIT_SRVADDRESS, m_strSrvAddress);
 	DDX_Text(pDX, IDC_EDIT_SRVPORT, m_nSrvPort);
 	DDX_Text(pDX, IDC_EDIT_USERNAME, m_strUserName);
+	DDX_Text(pDX, IDC_EDIT_PASSWORD, m_strPassword);
 	//}}AFX_DATA_MAP
 }
 
@@ -60,6 +62,10 @@ CString CSetupDlg::getServerAddress()
 {
 	return m_strSrvAddress;
 }
+CString CSetupDlg::getPassword()
+{
+	return m_strPassword;
+}
 UINT CSetupDlg::getServerPort()
 {
 	return m_nSrvPort;
@@ -71,7 +77,11 @@ void CSetupDlg::setUserName(CString param)
 }
 void CSetupDlg::setServerAddress(CString param)
 {
-	 m_strSrvAddress= param;
+	 m_strSrvAddress = param;
+}
+void CSetupDlg::setPassword(CString param)
+{
+	m_strPassword = param;
 }
 void CSetupDlg::setServerPort(UINT param)
 {

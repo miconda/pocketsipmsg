@@ -26,6 +26,7 @@ public:
 // Dialog Data
 	//{{AFX_DATA(CPocketSMDlg)
 	enum { IDD = IDD_DIALOG_MAIN };
+	CButton	m_ctlButtonSend;
 	CEdit	m_ctlEditMsg;
 	CComboBox	m_ctlComboTo;
 	CString	m_strEditView;
@@ -47,10 +48,15 @@ protected:
 	UINT	m_nIPPort;			// local port number
 	CString m_strIPAddress;		// local address
 	CString m_strUserName;		// user name
+	CString m_strUserPart;		// user part of username
+	CString m_strSrvPart;		// server part of username
+	CString m_strPassword;		// user password
+	CString m_strAuthHdr;		// realm
 	CString m_strSipSrvAddress;	// server address
 	UINT	m_nSipSrvPort;		// server port number
 	int		m_nFlag;			// flag
 	int		m_nCounter;			// message couter
+	int		m_nCallID;			// Call ID couter
 	CSIPMsg m_sipMsg;			// sip message object
 	bool	m_bDlgHide;			// the dialog is visible?
 	bool	m_bTrayIcon;		// tray icon state
@@ -72,13 +78,16 @@ protected:
 	void RemoveSystemTrayIcon();
 	int SendSIPRegister(char* expire, int nr);
 	int SendSIPMessage(CString to, CString body, int nr);
+	
+	int computeAuthHeader(CString sipRepl);
+	int translateToStr(CString s, str *ps);
 
 	void AddInfoMessage(CString s);
 	void AddToLastMessage(CString s);
 	void AddSentMessage(CString t, CString s);
 	void AddRecvMessage(CString f, CString s, CTime t);
 	void UpdateDisplayedMessage();
-
+	void UpdateCallID();
 	// Generated message map functions
 	//{{AFX_MSG(CPocketSMDlg)
 	virtual BOOL OnInitDialog();

@@ -22,14 +22,17 @@ public:
 	CString	m_strSrvAddress;
 	UINT	m_nSrvPort;
 	CString	m_strUserName;
+	CString	m_strPassword;
 	//}}AFX_DATA
 
 	CString getUserName();
 	CString getServerAddress();
+	CString getPassword();
 	UINT getServerPort();
 
 	void setUserName(CString param);
 	void setServerAddress(CString param);
+	void setPassword(CString param);
 	void setServerPort(UINT param);
 
 

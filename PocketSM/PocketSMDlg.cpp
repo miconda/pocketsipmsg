@@ -4,6 +4,7 @@
 #include "stdafx.h"
 #include "PocketSM.h"
 #include "PocketSMDlg.h"
+#include "rfc2617.h"
 #include <stdio.h>
 #include <Mmsystem.h>
 
@@ -17,6 +18,7 @@ static char THIS_FILE[] = __FILE__;
 #define TIMER_A_PERIOD	400
 #define RET_MILISEC		500
 #define MAX_CONTACTS	10
+#define EOH				"\r\n"
 
 ////////////////////////////////////////////////////////////////////////////
 // CPocketSMDlg dialog
@@ -34,11 +36,17 @@ CPocketSMDlg::CPocketSMDlg(CWnd* pParent /*=NULL*/)
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 	m_nIPPort = 5060;
 	m_pCSock = new CAsyncSocket();
+	//m_pCSock = NULL;
 	m_strIPAddress = GetIP();
-	m_strUserName = "";
-	m_strSipSrvAddress = "";
+	m_strUserName = _T("");
+	m_strSipSrvAddress = _T("");
+	m_strUserPart = _T("");
+	m_strSrvPart = _T("");
+	m_strPassword = _T("");
+	m_strAuthHdr = _T("");
+
 	m_nSipSrvPort = 5060;
-	m_nFlag = m_nCounter = 0;
+	m_nFlag = m_nCounter = m_nCallID = 0;
 	m_bDlgHide = false;
 	m_bTrayIcon = false;
 	m_bSetupOK = false;
@@ -55,6 +63,7 @@ void CPocketSMDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialog::DoDataExchange(pDX);
 	//{{AFX_DATA_MAP(CPocketSMDlg)
+	DDX_Control(pDX, IDC_BUTTON_SEND, m_ctlButtonSend);
 	DDX_Control(pDX, IDC_EDIT_MSG, m_ctlEditMsg);
 	DDX_Control(pDX, IDC_COMBO_TO, m_ctlComboTo);
 	DDX_Text(pDX, IDC_EDIT_VIEW, m_strEditView);
@@ -110,7 +119,6 @@ BOOL CPocketSMDlg::OnInitDialog()
 			m_strUserName = userName;
 			m_strSipSrvAddress = srvAddress;
 			m_nSipSrvPort = srvPort;
-			m_bSetupOK = true;
 
 			while(fscanf(f, "%s", userName) == 1)
 			{
@@ -127,10 +135,12 @@ BOOL CPocketSMDlg::OnInitDialog()
 	//m_strEditView = "Creating socket ...";
 	//UpdateData(FALSE);
 
-	ASSERT( m_pCSock == NULL );
+	if( m_pCSock == NULL )
+		AfxMessageBox(_T("Warning when creating socket."));
+
 	if(m_pCSock->Create(5060, SOCK_DGRAM) == 0)
 	{
-		AfxMessageBox(_T("Can not create the socket! Please restart."));
+		AfxMessageBox(_T("Cannot create the socket! Please restart."));
 	} 
 	m_pCSock->IOCtl(FIONBIO, &nonblock);
 
@@ -150,22 +160,37 @@ BOOL CPocketSMDlg::OnInitDialog()
  */
 int CPocketSMDlg::SendSIPRegister(char* expires, int nr)
 {
-	CString strBuf, strPort;
+	CString strBuf, strPort, callID;
 	CString servAddress;
 	UINT servPort;
-	char outBuf[2048], pBuf[1024];
-	int i, l, n;
+	char outBuf[2048], pBuf[2048], callIDBuf[50];
+	int i, l, n, f;
+	CTime t = CTime::GetCurrentTime();
+
+	if(m_nFlag != 1)
+		return -1;
+
+	m_bSetupOK = false;
+	m_ctlButtonSend.EnableWindow(FALSE);
+
+	UpdateCallID();
+	callID.Format(_T("70710PkSM@%s.%08lX-%X"), m_strIPAddress, t.GetTime(), m_nCallID);
+	l = callID.GetLength();
+	for(i=0; i<l && i < 49; i++)
+		callIDBuf[i] = (char)(callID.GetAt(i) & 0xFF);
+	callIDBuf[i] = 0;
+
 	strPort.Format(_T("%d"), m_nIPPort);
 
 	strBuf="REGISTER sip:";
-	strBuf += m_strSipSrvAddress;
+	strBuf += m_strSrvPart;
 
 	strBuf += " SIP/2.0\r\nVia: SIP/2.0/UDP "+m_strIPAddress+":"+strPort;
     strBuf += "\r\nFrom: sip:"+m_strUserName;
     strBuf += "\r\nTo: sip:"+m_strUserName;
-    strBuf += "\r\nCall-ID: 70710pocketpc@"+m_strIPAddress;
+    strBuf += "\r\nCall-ID: "+callID;
     strBuf += "\r\nCSeq: 1 REGISTER\r\nContact: <sip:"
-		+m_strIPAddress+":"+strPort+">\r\nExpires: ";
+		+m_strIPAddress+":"+strPort+";transport=udp>;methods=\"MESSAGE\"\r\nExpires: ";
 	strBuf += expires;
     strBuf += "\r\nUser-Agent: PocketSipM v0.1\r\nContent-Length: 0\r\n\r\n";
 
@@ -175,22 +200,102 @@ int CPocketSMDlg::SendSIPRegister(char* expires, int nr)
 		outBuf[i] = (char)(strBuf.GetAt(i) & 0xFF);
 	
 	n = 1;
+	f = 0;
+
+	/*** clean up the socket buffer ***/
+	while(m_pCSock->ReceiveFrom((void*)pBuf, 2047, servAddress, servPort) > 0)
+		Sleep(10);
+
 	while(n < nr+1)
 	{
 		i = m_pCSock->SendTo(outBuf, l, m_nSipSrvPort, (LPCTSTR)m_strSipSrvAddress);
 		if(i == SOCKET_ERROR || i != l)
 			return -1;
 		Sleep(RET_MILISEC);
-		i = m_pCSock->ReceiveFrom((void*)pBuf, 1023, servAddress, servPort);
+		i = m_pCSock->ReceiveFrom((void*)pBuf, 2047, servAddress, servPort);
 		if(i > 0)
 		{
 			pBuf[i] = 0;
-			if(!strncmp(pBuf, "SIP/2.0 ", 8))
+			if(!strncmp(pBuf, "SIP/2.0 ", 8) && strstr(pBuf, callIDBuf))
 			{
 				if(*(pBuf+8) == '2')
+				{
+					if(expires && expires[0]!='0')
+					{
+						m_bSetupOK = true;
+						m_ctlButtonSend.EnableWindow(TRUE);
+					}
 					return 0;
-				if(*(pBuf+8) == '3' || *(pBuf+8) == '4' 
-						|| *(pBuf+8) == '5' || *(pBuf+8) == '6')
+				}
+				if(*(pBuf+8) == '3' || *(pBuf+8) == '5' || *(pBuf+8) == '6')
+					return -1;
+				if(*(pBuf+8) == '4' && *(pBuf+9) == '0' && *(pBuf+10) == '1')
+				{
+					f = 1;
+					break;
+				}
+				else
+					return -1;
+			}
+		}
+		n++;
+	}
+	if(f!=1)
+		return -1;
+	if(computeAuthHeader(pBuf)<0)
+		return -1;
+
+	UpdateCallID();
+	callID.Format(_T("70710PkSM@%s.%08lX-%X"), m_strIPAddress, t.GetTime(), m_nCallID);
+	l = callID.GetLength();
+	for(i=0; i<l && i < 49; i++)
+		callIDBuf[i] = (char)(callID.GetAt(i) & 0xFF);
+	callIDBuf[i] = 0;
+
+	strBuf="REGISTER sip:";
+	strBuf += m_strSrvPart;
+
+	strBuf += " SIP/2.0\r\nVia: SIP/2.0/UDP "+m_strIPAddress+":"+strPort;
+    strBuf += "\r\nFrom: sip:"+m_strUserName;
+    strBuf += "\r\nTo: sip:"+m_strUserName;
+    strBuf += "\r\nCall-ID: "+callID;
+    strBuf += "\r\nCSeq: 2 REGISTER\r\nContact: <sip:"
+		+m_strIPAddress+":"+strPort+";transport=udp>;methods=\"MESSAGE\"\r\nExpires: ";
+	strBuf += expires;
+	strBuf += "\r\n"+m_strAuthHdr;
+    strBuf += "\r\nUser-Agent: PocketSipM v0.1\r\nContent-Length: 0\r\n\r\n";
+
+	// convert from UNICODE to ASCII
+	l = strBuf.GetLength();
+	for(i=0; i<l; i++)
+		outBuf[i] = (char)(strBuf.GetAt(i) & 0xFF);
+	
+	n = 1;
+	/*** clean up the socket buffer ***/
+	while(m_pCSock->ReceiveFrom((void*)pBuf, 2047, servAddress, servPort) > 0)
+		Sleep(10);
+	while(n < nr+1)
+	{
+		i = m_pCSock->SendTo(outBuf, l, m_nSipSrvPort, (LPCTSTR)m_strSipSrvAddress);
+		if(i == SOCKET_ERROR || i != l)
+			return -1;
+		Sleep(RET_MILISEC);
+		i = m_pCSock->ReceiveFrom((void*)pBuf, 2047, servAddress, servPort);
+		if(i > 0)
+		{
+			pBuf[i] = 0;
+			if(!strncmp(pBuf, "SIP/2.0 ", 8) && strstr(pBuf, callIDBuf))
+			{
+				if(*(pBuf+8) == '2')
+				{
+					if(expires && expires[0]!='0')
+					{
+						m_bSetupOK = true;
+						m_ctlButtonSend.EnableWindow(TRUE);
+					}
+					return 0;
+				}
+				if(*(pBuf+8) == '3' || *(pBuf+8) == '4' || *(pBuf+8) == '5' || *(pBuf+8) == '6')
 					return -1;
 			}
 		}
@@ -207,12 +312,20 @@ int CPocketSMDlg::SendSIPMessage(CString to, CString body, int nr)
 	CString strBuf, strPort, callID;
 	CString servAddress;
 	UINT servPort;
-	char outBuf[2048], pBuf[1024];
+	char outBuf[2048], pBuf[1024], callIDBuf[50];
 	int i, l, n;
 	CTime t = CTime::GetCurrentTime();
 
+	if(!m_bSetupOK)
+		return -1;
+
 	strPort.Format(_T("%d"), m_nIPPort);
-	callID.Format(_T("8923pPC@%s.%08lX"), m_strIPAddress, t.GetTime());
+	UpdateCallID();
+	callID.Format(_T("8923PkSM@%s.%08lX-%X"), m_strIPAddress, t.GetTime(), m_nCallID);
+	l = callID.GetLength();
+	for(i=0; i<l && i < 49; i++)
+		callIDBuf[i] = (char)(callID.GetAt(i) & 0xFF);
+	callIDBuf[i] = 0;
 
 	strBuf="MESSAGE sip:";
 	strBuf += to;
@@ -234,6 +347,9 @@ int CPocketSMDlg::SendSIPMessage(CString to, CString body, int nr)
 		outBuf[i] = (char)(strBuf.GetAt(i) & 0xFF);
 	
 	n = 1;
+	/*** clean up the socket buffer ***/
+	while(m_pCSock->ReceiveFrom((void*)pBuf, 2047, servAddress, servPort) > 0)
+		Sleep(10);
 	while(n < nr+1)
 	{
 		i = m_pCSock->SendTo(outBuf, l, m_nSipSrvPort, (LPCTSTR)m_strSipSrvAddress);
@@ -244,7 +360,7 @@ int CPocketSMDlg::SendSIPMessage(CString to, CString body, int nr)
 		if(i > 0)
 		{
 			pBuf[i] = 0;
-			if(!strncmp(pBuf, "SIP/2.0 ", 8))
+			if(!strncmp(pBuf, "SIP/2.0 ", 8) && strstr(pBuf, callIDBuf))
 			{
 				if(*(pBuf+8) == '2')
 				{
@@ -328,19 +444,6 @@ void CPocketSMDlg::OnTimer(UINT nIDEvent)
 			}
 		}
 
-		if(m_nFlag == 0)
-		{
-			m_nFlag = 1;
-			servAddress.Format(_T("<%s>\r\n  registering to: %s\r\n"),
-				m_strUserName, m_strSipSrvAddress);
-			AddInfoMessage(servAddress);
-			UpdateDisplayedMessage();
-			if(SendSIPRegister("3600", 10) != 0)
-				AddToLastMessage("Not registered. Please restart\r\n");
-			else
-				AddToLastMessage("Registered.\r\n");
-			UpdateDisplayedMessage();
-		}
 
 		res.s = oBuf;
 		res.len = 1024;
@@ -405,8 +508,8 @@ void CPocketSMDlg::OnTimer(UINT nIDEvent)
 	else
 		if(!m_bSetupOK)
 		{
-			AddInfoMessage("Config params are not set!\r\nClick on 'Setup' to set them");
-			UpdateDisplayedMessage();
+			//AddInfoMessage("Config params are not set!\r\nClick on 'Setup' to set them");
+			//UpdateDisplayedMessage();
 		}
 	CDialog::OnTimer(nIDEvent);
 }
@@ -450,14 +553,15 @@ void CPocketSMDlg::OnOK()
 	CString lStr;
 
 	// TODO: Add extra validation here
-	SendSIPRegister("0", 2);
+	if(m_bSetupOK)
+		SendSIPRegister("0", 2);
 
 	// remove icon from system tray
 	RemoveSystemTrayIcon();
 
 	// close the SOCKET
-	ASSERT( m_pCSock == NULL );
-	m_pCSock->Close();
+	if( m_pCSock != NULL )
+		m_pCSock->Close();
 	
 	if((f = fopen("psm.cfg", "wt")) != NULL)
 	{
@@ -490,19 +594,53 @@ void CPocketSMDlg::OnOK()
  */
 void CPocketSMDlg::OnButtonSetup() 
 {
+	int i;
+	CString strBuf;
 	// TODO: Add your control notification handler code here
 	// m_TrayIcon.MinimiseToTray(this);
 	if(m_dlgSetup->DoModal() == IDOK)
 	{
-		if(!m_bSetupOK)
-			m_bSetupOK = true;
-		if(m_dlgSetup->getUserName().GetLength() > 0)
+		UpdateWindow();
+		if(m_bSetupOK)
+			SendSIPRegister("0", 2);
+		m_nFlag = 1;
+		if(m_dlgSetup->getUserName().GetLength() > 0 
+			&& m_dlgSetup->getUserName().Find('@') > 0
+			&& m_dlgSetup->getUserName().Find(':') < 0)
+		{
 			m_strUserName = m_dlgSetup->getUserName();
+			i = m_strUserName.Find('@');
+			if (i!=-1)
+			{
+				m_strUserPart = m_strUserName.Left(i);
+				m_strSrvPart = m_strUserName.Right(m_strUserName.GetLength() - i - 1);
+			}
+
+		}
+		else
+		{
+			AfxMessageBox(_T("SIP User ID is invalid.\r\nMust be like:\r\n\"username@sipserver.com\""));
+			return;
+		}
+		if(m_dlgSetup->getPassword().GetLength() > 0)
+			m_strPassword = m_dlgSetup->getPassword();
 		if(m_dlgSetup->getServerAddress().GetLength() > 0)
 			m_strSipSrvAddress = m_dlgSetup->getServerAddress();
+		else
+			m_strSipSrvAddress = m_strSrvPart;
+
 		if(m_dlgSetup->getServerPort()  > 0)
 			m_nSipSrvPort = m_dlgSetup->getServerPort();
-		m_nFlag = 0;
+
+		strBuf.Format(_T("<%s> registering ...\r\n  outbound proxy:\r\n   <%s:%d>\r\n"),
+			m_strUserName, m_strSipSrvAddress, m_nSipSrvPort);
+		AddInfoMessage(strBuf);
+		UpdateDisplayedMessage();
+		if(SendSIPRegister("3600", 10) != 0)
+			AddToLastMessage("Not registered. Please try again.\r\n");
+		else
+			AddToLastMessage("Registered.\r\n");
+		UpdateDisplayedMessage();
 	}
 }
 
@@ -820,3 +958,176 @@ void CPocketSMDlg::OnButtonDeleteContact()
 	
 }
 ***/
+int CPocketSMDlg::computeAuthHeader( CString sipRepl )
+{
+	CString  wwwAuth;
+	CString  authHdr;
+	CString  newSipReq;
+	int h,t,l,n;
+	int quote;
+	CString  s;
+	CString strTmp;
+	CString  par;
+	CString  cnonce = "SAIDF3W2R8FAETR329FAHSDF34";
+	/* header params */
+	CString  param[]={"realm","nonce","opaque","algorithm","qop","stale"};
+	CString  vals[]={"","","","","",""};
+	CString  strURI = "sip:";
+	int     quoted[]={1,1,1,0,1,0};
+	HASHHEX hashHex1;
+	HASHHEX hashHex2;
+	str strMethod = {"REGISTER", 8};
+	char userBuf[30], passwdBuf[30], nonceBuf[50], cnonceBuf[50], uriBuf[50], realmBuf[50];
+	str sUser = {userBuf, 30}, sPasswd = {passwdBuf, 30}, sRealm = {realmBuf, 50},
+		sNonce = {nonceBuf, 50}, sCnonce = {cnonceBuf, 50}, sURI = {uriBuf, 50};
+
+	m_strAuthHdr = "";
+	strURI += m_strSrvPart;
+
+	//AddInfoMessage(sipRepl);
+	//UpdateDisplayedMessage();
+
+	/* get the www-auth header from reply */
+	h = sipRepl.Find(_T("WWW-Authenticate"));
+	if (h==-1)
+		return -1;
+
+	strTmp = sipRepl.Right(sipRepl.GetLength()-h);
+	t = strTmp.Find('\n');
+	if(strTmp.GetAt(t-1) == '\r')
+		t--;
+	wwwAuth = sipRepl.Mid(h,t);
+
+	/* parse the www_auth header */
+	s = wwwAuth;
+	h = s.Find(_T("Digest"));
+	if (h==-1)
+		return -2;
+	h += 6;
+	/* comput the length of useful part */
+	l = s.GetLength();
+	while (s.GetAt(l-1)=='\n' || s.GetAt(l-1)=='\r')
+		l--;
+	/* look for all the params */
+	while(h<l) {
+		/* search the begining of the next param */
+		while( h<l && (s.GetAt(h)==' ' || s.GetAt(h)=='\t') )
+			h++;
+		if (h==l)
+			return -3;
+		/* get the param name */
+		t = h;
+		while( t<l && s.GetAt(t)!=' ' && s.GetAt(t)!='=')
+			t++;
+		if (t==l || t==h)
+			return -4;
+		par = s.Mid(h,t-h);
+		h=t;
+		/* are we looking for this parameter? */
+		for(n=0; n<6; n++)
+			if(!param[n].CompareNoCase(par))
+				break;
+		if(n==6)
+			n = -1;
+
+		/* eat spaces */
+		while( h<l && (s.GetAt(h)==' ' || s.GetAt(h)=='\t') )
+			h++;
+		/* do we have a "="? */
+		if (h==l || s.GetAt(h)!='=' || ++h==l)
+			return -5;
+		/* eat spaces */
+		while( h<l && (s.GetAt(h)==' ' || s.GetAt(h)=='\t') )
+			h++;
+		/* param's value */
+		if ( n!=-1 && ( (quoted[n]==1 && s.GetAt(h)!='"') ||
+			(quoted[n]==0 && s.GetAt(h)=='"')) )
+			return -6;
+		if(n!=-1 && quoted[n]==1)
+			h++;
+		quote=(n==-1&&s.GetAt(h)=='"')||(n!=-1&&quoted[n]==1)?1:0;
+		/* look for the end of value */
+		t = h;
+		while( t<l && (quote && s.GetAt(t)!='"' ||
+			!quote && s.GetAt(t)!=' ' && s.GetAt(t)!=',') )
+			t++;
+		if (t==h)
+			return -7;
+		if (n!=-1) {
+			vals[n] = s.Mid(h,t-h);
+		}
+		h = t + (quote?1:0);
+		/* eat spaces */
+		while( h<l && (s.GetAt(h)==' ' || s.GetAt(h)=='\t') )
+			h++;
+		if (h==l)  break;
+		/* here must be a ',' */
+		if (s.GetAt(h)!=',' || ++h==l)
+			return -8;
+	}
+	/* some checkings */
+	if (vals[0]=="")
+		return -9;
+	if (vals[1]=="")
+		return -10;
+	/* comput the authentication */
+	translateToStr(m_strUserPart, &sUser);
+	translateToStr(m_strPassword, &sPasswd);
+	translateToStr(vals[0], &sRealm);
+	translateToStr(vals[1], &sNonce);
+	translateToStr(cnonce, &sCnonce);
+	translateToStr(strURI, &sURI);
+
+	calc_HA1(HA_MD5, &sUser, &sRealm, &sPasswd, &sNonce, &sCnonce, hashHex1);
+
+	calc_response(hashHex1, &sNonce, NULL, &sCnonce, NULL, 0, &strMethod, &sURI, NULL, hashHex2);
+
+	/* build authorization header */
+	m_strAuthHdr = "Authorization: Digest";
+	/* add username */
+	m_strAuthHdr += " username=\""+m_strUserPart+"\"";
+	/* add realm */
+	m_strAuthHdr += ", realm=\""+vals[0]+"\"";
+	/* add uri */
+	m_strAuthHdr += ", uri=\"";
+	m_strAuthHdr += strURI;
+	m_strAuthHdr += "\"";
+	/* add algorithm */
+	m_strAuthHdr += ", algorithm="+vals[3]+"";
+	/* add nonce */
+	m_strAuthHdr += ", nonce=\""+vals[1]+"\"";
+	/* add opaque, if needed */
+	if (vals[2]!="")
+		m_strAuthHdr += ", opaque=\""+vals[2]+"\"";
+	/* add qop, if needed */
+	if (vals[4]!="") {
+		m_strAuthHdr += ", qop=\""+vals[4]+"\"";
+		m_strAuthHdr += ", cnonce=\""+cnonce+"\"";
+	}
+	/* add response */
+	m_strAuthHdr += ", response=\"";
+	m_strAuthHdr += hashHex2;
+	m_strAuthHdr += "\"";
+	return 0;
+}
+
+int CPocketSMDlg::translateToStr(CString s, str *ps)
+{
+	int i,l;
+	if(ps == NULL)
+		return -1;
+	// convert from UNICODE to ASCII
+	l = s.GetLength();
+	if(l>ps->len)
+		return -2;
+	ps->len = l;
+	for(i=0; i<l; i++)
+		ps->s[i] = (char)(s.GetAt(i) & 0xFF);
+
+	return 0;
+}
+
+void CPocketSMDlg::UpdateCallID()
+{
+	m_nCallID = (m_nCallID+1)%100000;
+}

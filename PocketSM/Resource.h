@@ -24,6 +24,8 @@
 #define ID_BUTTON_HIDE                  1016
 #define IDC_BUTTON_EXIT                 1017
 #define IDC_BUTTON_DELETE_CONTACT       1018
+#define IDC_EDIT_PASSWORD               1019
+#define IDC_EDIT_REALM                  1020
 #define ID_MENUITEM32771                32771
 #define IDS_CAP_MENUITEM32772           32773
 #define IDR_MENU_POPUP                  32774
@@ -38,7 +40,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        158
 #define _APS_NEXT_COMMAND_VALUE         32782
-#define _APS_NEXT_CONTROL_VALUE         1019
+#define _APS_NEXT_CONTROL_VALUE         1021
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

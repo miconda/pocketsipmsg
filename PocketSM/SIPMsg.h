@@ -9,11 +9,7 @@
 #pragma once
 #endif // _MSC_VER > 1000
 
-typedef struct _str
-{
-	char *s;
-	int len;
-} str;
+#include "str.h"
 
 int m_strncasecmp(char *a, char *b, int l);
 

@@ -1,0 +1,146 @@
+PocketSM
+========
+
+Revisions
+2003-01-21 Daniel Mierla - new version with authentication support
+2002-10-01 Daniel Mierla - first version
+
+SIP Instant Messaging client for Pocket PC
+------------------------------------------
+
+1. Introduction
+The application is developed using Embedded Visual C++ for Windows CE. It is a
+dialog based application and uses MFC in a shared DLL.
+
+The application is able to register to a SIP server (with basic/digest authentication)
+and to receive SIP MESSAGE messages. It displays arrival time stamp, sender address 
+and the content of the message.
+
+1.1 Features
+ - send/receive SIP MESSAGE messages 
+ - simple registration support (no authentication) 
+ - sound notification 
+ - system tray icon 
+ - GUI - dialog based application 
+ - free - LGPL license 
+ - developed using Microsoft eMbedded Visual C++ 3.0 
+ - Authentication support 
+
+ 
+2.Implemetation specifications
+Summary of what is in each of the files that make up the PocketSM application.
+PocketSM.h
+    This is the main header file for the application.  It includes other
+    project specific headers (including Resource.h) and declares the
+    CPocketSMApp application class (usually does not need any changes).
+PocketSM.cpp
+    This is the main application source file that contains the application
+    class CPocketSMApp (usually does not need any changes).
+PocketSM.rc
+    This is a listing of all of the Microsoft Windows CE resources that the
+    program uses.  It includes the icons, bitmaps, and cursors that are stored
+    in the RES subdirectory.  This file can be directly edited in Microsoft
+	eMbedded Visual C++.
+res\PocketSM.ico
+    This is an icon file, which is used as the application's icon.  This
+    icon is included by the main resource file PocketSM.rc.
+res\PocketSM.rc2
+    This file contains resources that are not edited by Microsoft 
+	eMbedded Visual C++.  You should place all resources not
+	editable by the resource editor in this file.
+PocketSM.vcc
+    This file contains information used by ClassWizard to edit existing
+    classes or add new classes.  ClassWizard also uses this file to store
+    information needed to create and edit message maps and dialog data
+    maps and to create prototype member functions.
+PocketSMDlg.h, PocketSMDlg.cpp - the dialog
+    These files contain the CPocketSMDlg class.  This class defines
+    the behavior of the application's main dialog.  The dialog's
+    template is in PocketSM.rc, which can be edited in Microsoft
+	Developer Studio. Here are majority of implemented methods.
+SIPMsg.h, SIPMsg.cpp - the SIP MESSAGE object
+	These files contains the CSIPMsg class. This class is used for SIP messages 
+	handling - message parsing, response building.
+SetupDlg.h, SetupDlg.cpp - the setup dialog
+	These files contains the CSetupDlg class. This class defines the behavior
+	of the setup dialog. This dialog is used for setting the values for 
+	application attributes.
+md5*.cpp md5*.h rfc2617.cpp rfc2617.h - www basic/digest authentication support
+	
+Other standard files:
+StdAfx.h, StdAfx.cpp
+    These files are used to build a precompiled header (PCH) file
+    named PocketSM.pch and a precompiled types file named StdAfx.obj.
+Resource.h
+    This is the standard header file, which defines new resource IDs.
+    Microsoft eMbedded Visual C++ reads and updates this file.
+
+3.Detailed specifications
+The meaning for each class attribute is specified in class declaration 
+(the header file). Useful comments are inline in sources.
+
+CPocketSMDlg's methods:
+	* CString GetIP() - return the local IP address
+	* void AddSystemTrayIcon() - add the icon in system tray
+	* void SetNewTrayIcon() - set the icon for a new message incoming
+	* void SetOldTrayIcon() - set the icon when the new message is read
+	* void RemoveSystemTrayIcon() - delete the icon from system tray
+	* int SendRegister() - send a REGISTER message to the SIP server
+
+	* BOOL OnInitDialog() - initialization method for the dialog
+	* void OnTimer(UINT nIDEvent) - timer callback function - here is implemented
+		application behavior - from 500ms to 500ms the application checks for 
+		incoming messages. After a while sends again the REGISTER message.
+	* void OnPaint() - display the background image on dialog
+	* void OnOK() - called at application closure - deletes the system tray icon
+		and closes the socket
+	* void OnButtonSetup() - display the setup dialog
+	* void OnButtonHide() - hide the application
+	* LRESULT	OnIconNotify(WPARAM wParam, LPARAM lParam) - handler for system 
+		tray notification - processing of the click event (application dialog 
+		displaying)
+		
+CSetupDlg's methods:
+	* CString getUserName() - get the user name (user SIP id) from input field
+	* CString getServerAddress() - get the server address from input field
+	* UINT getServerPort() - get the server port from input field
+
+	* void setUserName(CString param) - set the user SIP id to be displayed on 
+		dialog field
+	* void setServerAddress(CString param) - set the server address to be 
+		displayed on dialog field
+	* void setServerPort(UINT param) - set the server port to be displayed on
+		dialog field
+		
+CSIPMsg's methods:
+	All functions return 0 if all was OK.
+	* int setSIPMsg(char* msg, int len) - set the SIP message
+	* int getFrom(str *f) - set the pointer to the beginning of the 'from'
+		header and the length of it
+	* int getBody(str *b)  - set the pointer to the beginning of the body
+		and the length of it
+	* int buildResponse(str *r, char *fl, CString cAddr, int cPort) - builds
+		a reply messages - need: first line, contact address and contact port
+	* int isMessage();
+
+4.User specifications
+	First time when the application is launched, is looking for config file.
+	If the file is found and it was able to read the user SIP id, SIP server
+	address and the SIP server port, then the application tries to register
+	at SIP server. If the file is not found, then the user must set the values
+	of those attributes in setup dialog. Click on 'Setup' button. When the 
+	setup dialog is closed using button 'OK' the registration process will 
+	start and the values will be stored in config file. Otherwise nothing is done.
+	
+	When a new message is received, a sound is played and the system tray icon 
+	is changed. After the application dialog is showed again the old icon is
+	set in system tray.
+	
+	To hide the application window, press the 'Hide' button. To close the 
+	application, press the 'Close' or 'OK' button (upper right corner).
+
+5. General notes
+Software version used in implementation and testing process:
+	- EMbedded Visual C++ 3.0
+	- WindowsCE 3.0
+	- iPAQ PocketPC (Compaq)

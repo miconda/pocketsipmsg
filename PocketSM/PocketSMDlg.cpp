@@ -44,7 +44,7 @@ CPocketSMDlg::CPocketSMDlg(CWnd* pParent /*=NULL*/)
 	m_strSrvPart = _T("");
 	m_strPassword = _T("");
 	m_strAuthHdr = _T("");
-
+	m_strFTag = _T("ROGJ-01CMC-")+m_strIPAddress;
 	m_nSipSrvPort = 5060;
 	m_nFlag = m_nCounter = m_nCallID = 0;
 	m_bDlgHide = false;
@@ -132,6 +132,8 @@ BOOL CPocketSMDlg::OnInitDialog()
 	m_dlgSetup->setServerAddress(m_strSipSrvAddress);
 	m_dlgSetup->setServerPort(m_nSipSrvPort);
 
+	m_dlgSetup->setMyContact(m_strIPAddress, m_nIPPort);
+
 	//m_strEditView = "Creating socket ...";
 	//UpdateData(FALSE);
 
@@ -149,6 +151,8 @@ BOOL CPocketSMDlg::OnInitDialog()
 	//m_strEditView.Format(_T("Listening on: %s:%d"), 
 	//	m_strIPAddress, m_nIPPort);
 	//UpdateData(FALSE);
+	while ((srvPort = m_strFTag.Find('.'))>=0)
+		m_strFTag.SetAt(srvPort, 'A'+srvPort%25);
 
 	AddSystemTrayIcon();
 
@@ -186,9 +190,10 @@ int CPocketSMDlg::SendSIPRegister(char* expires, int nr)
 	strBuf += m_strSrvPart;
 
 	strBuf += " SIP/2.0\r\nVia: SIP/2.0/UDP "+m_strIPAddress+":"+strPort;
-    strBuf += "\r\nFrom: sip:"+m_strUserName;
-    strBuf += "\r\nTo: sip:"+m_strUserName;
-    strBuf += "\r\nCall-ID: "+callID;
+    strBuf += "\r\nFrom: <sip:"+m_strUserName;
+    strBuf += ">;tag="+m_strFTag;
+    strBuf += "\r\nTo: <sip:"+m_strUserName;
+    strBuf += ">\r\nCall-ID: "+callID;
     strBuf += "\r\nCSeq: 1 REGISTER\r\nContact: <sip:"
 		+m_strIPAddress+":"+strPort+";transport=udp>;methods=\"MESSAGE\"\r\nExpires: ";
 	strBuf += expires;
@@ -256,9 +261,10 @@ int CPocketSMDlg::SendSIPRegister(char* expires, int nr)
 	strBuf += m_strSrvPart;
 
 	strBuf += " SIP/2.0\r\nVia: SIP/2.0/UDP "+m_strIPAddress+":"+strPort;
-    strBuf += "\r\nFrom: sip:"+m_strUserName;
-    strBuf += "\r\nTo: sip:"+m_strUserName;
-    strBuf += "\r\nCall-ID: "+callID;
+    strBuf += "\r\nFrom: <sip:"+m_strUserName;
+    strBuf += ">;tag="+m_strFTag;
+    strBuf += "\r\nTo: <sip:"+m_strUserName;
+    strBuf += ">\r\nCall-ID: "+callID;
     strBuf += "\r\nCSeq: 2 REGISTER\r\nContact: <sip:"
 		+m_strIPAddress+":"+strPort+";transport=udp>;methods=\"MESSAGE\"\r\nExpires: ";
 	strBuf += expires;
@@ -331,9 +337,10 @@ int CPocketSMDlg::SendSIPMessage(CString to, CString body, int nr)
 	strBuf += to;
 
 	strBuf += " SIP/2.0\r\nVia: SIP/2.0/UDP "+m_strIPAddress+":"+strPort;
-    strBuf += "\r\nFrom: sip:"+m_strUserName;
-    strBuf += ";tag=a8437-3mkdsf-9474kjf-2323\r\nTo: sip:"+to;
-    strBuf += "\r\nCall-ID: "+callID;
+    strBuf += "\r\nFrom: <sip:"+m_strUserName;
+    strBuf += ">;tag="+m_strFTag;
+    strBuf += "\r\nTo: <sip:"+to;
+    strBuf += ">\r\nCall-ID: "+callID;
     strBuf += "\r\nCSeq: 1 MESSAGE\r\nContact: <sip:"
 		+m_strUserName+">\r\nContent-Type: text/plain; charset=UTF-8";
     strBuf += "\r\nUser-Agent: PocketSipM v0.1\r\nContent-Length: ";
@@ -1093,7 +1100,10 @@ int CPocketSMDlg::computeAuthHeader( CString sipRepl )
 	m_strAuthHdr += strURI;
 	m_strAuthHdr += "\"";
 	/* add algorithm */
-	m_strAuthHdr += ", algorithm="+vals[3]+"";
+	if(vals[3].GetLength() > 0)
+		m_strAuthHdr += ", algorithm=\""+vals[3]+"\"";
+	else
+		m_strAuthHdr += ", algorithm=\"md5\"";
 	/* add nonce */
 	m_strAuthHdr += ", nonce=\""+vals[1]+"\"";
 	/* add opaque, if needed */

@@ -2,6 +2,8 @@ PocketSM
 ========
 
 Revisions
+2003-05-07 Daniel Mierla - fixed bug when the algorithm for digest authentication is not specified
+                           in chalange parameters - default is MD5
 2003-01-21 Daniel Mierla - new version with authentication support
 2002-10-01 Daniel Mierla - first version
 

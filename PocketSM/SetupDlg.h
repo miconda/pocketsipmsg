@@ -23,6 +23,7 @@ public:
 	UINT	m_nSrvPort;
 	CString	m_strUserName;
 	CString	m_strPassword;
+	CString	m_strMyContact;
 	//}}AFX_DATA
 
 	CString getUserName();
@@ -30,6 +31,7 @@ public:
 	CString getPassword();
 	UINT getServerPort();
 
+	void setMyContact(CString addr, int port);
 	void setUserName(CString param);
 	void setServerAddress(CString param);
 	void setPassword(CString param);

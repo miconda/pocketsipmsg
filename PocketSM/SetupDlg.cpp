@@ -22,6 +22,7 @@ CSetupDlg::CSetupDlg(CWnd* pParent /*=NULL*/)
 	m_nSrvPort = 0;
 	m_strUserName = _T("");
 	m_strPassword = _T("");
+	m_strMyContact = _T("");
 	//}}AFX_DATA_INIT
 }
 
@@ -34,6 +35,7 @@ void CSetupDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Text(pDX, IDC_EDIT_SRVPORT, m_nSrvPort);
 	DDX_Text(pDX, IDC_EDIT_USERNAME, m_strUserName);
 	DDX_Text(pDX, IDC_EDIT_PASSWORD, m_strPassword);
+	DDX_Text(pDX, IDC_MY_CONTACT, m_strMyContact);
 	//}}AFX_DATA_MAP
 }
 
@@ -69,6 +71,12 @@ CString CSetupDlg::getPassword()
 UINT CSetupDlg::getServerPort()
 {
 	return m_nSrvPort;
+}
+
+
+void CSetupDlg::setMyContact(CString addr, int port)
+{
+	m_strMyContact.Format(_T("[%s:%d]"), addr, port);
 }
 
 void CSetupDlg::setUserName(CString param)

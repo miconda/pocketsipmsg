@@ -53,6 +53,7 @@ protected:
 	CString m_strPassword;		// user password
 	CString m_strAuthHdr;		// realm
 	CString m_strSipSrvAddress;	// server address
+	CString m_strFTag;      	// from tag value
 	UINT	m_nSipSrvPort;		// server port number
 	int		m_nFlag;			// flag
 	int		m_nCounter;			// message couter
